@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key});
@@ -11,30 +14,26 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   GoogleMapController? mapController;
-
   final Set<Marker> _markers = {};
   final Set<Polyline> _polylines = {};
-
-  // Define initial coordinates for demonstration
-  final LatLng _currentLocation =
-      LatLng(23.015913, 91.397583); // Example: San Francisco
-  final LatLng _destination = LatLng(22.3493, 91.8217); // Example: Los Angeles
+  final LatLng _currentLocation = LatLng(23.015913, 91.397583); // Example: Feni
+  final LatLng _destination = LatLng(22.3493, 91.8217); // Example: Chittagong
 
   @override
   void initState() {
     super.initState();
+    _setMarkers();
+    _fetchRouteAndDrawPolyline();
+  }
 
+  void _setMarkers() {
     _markers.add(Marker(
       markerId: MarkerId('currentLocation'),
       position: _currentLocation,
-      infoWindow:
-          InfoWindow(title: 'Current Location', snippet: 'San Francisco'),
+      infoWindow: InfoWindow(title: 'Current Location', snippet: 'Feni'),
       onTap: () {
         String shareLink =
             "https://maps.google.com/?q=${_currentLocation.latitude},${_currentLocation.longitude}";
-
-        // String shareLink =
-        //     "https://github.com/axiftaj/Flutter-Google-Map-Tutorials/tree/main/images";
         Share.share(shareLink);
       },
     ));
@@ -42,19 +41,44 @@ class _MyHomePageState extends State<MyHomePage> {
     _markers.add(Marker(
       markerId: MarkerId('destination'),
       position: _destination,
-      infoWindow: InfoWindow(title: 'Destination', snippet: 'Los Angeles'),
+      infoWindow: InfoWindow(title: 'Destination', snippet: 'Chittagong'),
       onTap: () => _showLocationDetails('Destination', _destination),
-    ));
-
-    _polylines.add(Polyline(
-      polylineId: PolylineId('route'),
-      points: [_currentLocation, _destination],
-      width: 5,
-      color: Colors.blue,
     ));
   }
 
-  // Show location details
+  Future<void> _fetchRouteAndDrawPolyline() async {
+    const String apiKey = 'AIzaSyAszXC1be8aJ37eHuNcBm_-O1clWkPUwV4';
+    final String apiUrl =
+        'https://maps.googleapis.com/maps/api/directions/json?origin=${_currentLocation.latitude},${_currentLocation.longitude}&destination=${_destination.latitude},${_destination.longitude}&key=$apiKey';
+
+    final response = await http.get(Uri.parse(apiUrl));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['status'] == 'OK') {
+        List<PointLatLng> points = PolylinePoints()
+            .decodePolyline(data['routes'][0]['overview_polyline']['points']);
+
+        List<LatLng> polylineCoordinates = points
+            .map((point) => LatLng(point.latitude, point.longitude))
+            .toList();
+
+        setState(() {
+          _polylines.add(
+            Polyline(
+              polylineId: PolylineId('route'),
+              points: polylineCoordinates,
+              color: Colors.redAccent,
+              width: 6,
+            ),
+          );
+        });
+      }
+    } else {
+      throw Exception('Failed to load route');
+    }
+  }
+
   void _showLocationDetails(String title, LatLng location) {
     showDialog(
       context: context,
@@ -69,10 +93,6 @@ class _MyHomePageState extends State<MyHomePage> {
                 String shareLink =
                     "https://www.google.com/maps?q=${location.latitude},${location.longitude}";
                 Share.share(shareLink);
-                // Share location logic here (e.g., with URL)
-                // String shareUrl = 'https://www.google.com/maps?q=${location.latitude},${location.longitude}';
-                // print('Share this location: $shareUrl');
-                // Navigator.pop(context);
               },
               child: Text('Share Location'),
             ),
@@ -86,7 +106,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Google Maps Flutter Example'),
+        title: Text('Google Maps Directions'),
       ),
       body: GoogleMap(
         initialCameraPosition: CameraPosition(
@@ -98,6 +118,7 @@ class _MyHomePageState extends State<MyHomePage> {
         },
         markers: _markers,
         polylines: _polylines,
+        mapType: MapType.normal,
       ),
     );
   }
